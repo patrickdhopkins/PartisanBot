@@ -4,15 +4,21 @@ import time
 import os
 import requests
 import re
+from textblob import TextBlob
+
+
 # need "comments_replied_to to be global, but before was setting = authenticate, may cause problems now that i'm setting it to empty??"
 # should refactor to have Conservative, Liberal, and NDP classes that extend a super class called Party
 comments_replied_to = []
 conservative_count = 0
-conservative_bal = 0
+conservative_sentiment = 0
+conservative_subjectivity = 0
 liberal_count = 0
-liberal_bal = 0
+liberal_sentiment = 0
+liberal_subjectivity = 0
 ndp_count = 0
-ndp_bal = 0
+ndp_sentiment = 0
+ndp_subjectivity = 0
 
 
 def authenticate():
@@ -23,53 +29,50 @@ def authenticate():
 	return reddit
 
 
-def count_conservative(body):
+def count_conservative(sentence):
 	global conservative_count
 	conservative_count += 1 
-	global conservative_bal
-	conservative_bal += count_good_or_bad(body)
+	global conservative_sentiment
+	conservative_sentiment += count_good_or_bad(sentence)
 
 
-def count_liberal(body):
+def count_liberal(sentence):
 	global liberal_count
 	liberal_count +=1
-	global liberal_bal
-	liberal_bal += count_good_or_bad(body)
+	global liberal_sentiment
+	liberal_sentiment += count_good_or_bad(sentence)
 
 
-def count_ndp(body):
+def count_ndp(sentence):
 	global ndp_count
 	ndp_count +=1
-	global ndp_bal
-	ndp_bal += count_good_or_bad(body)
+	global ndp_sentiment
+	ndp_sentiment += count_good_or_bad(sentence)
 
 
-# should add body.lower()
-def count_good_or_bad(body):
-	bal = 0
-	if "good" in body or "great" in body or "awesome" in body or "love" in body or "best" in body or "like" in body or "favorite" in body:
-		bal += 1
-	if "bad" in body or "awful" in body or "hate" in body or "dislike" in body or "worst" in body or "racist" in body or "stupid" in body or "suck" in body or "dumb" in body or "horrible" in body or "terrible" in body or "evil" in body or "creepy" in body or "ugly" in body:
-		bal -= 1
-	return bal
+
+def count_good_or_bad(sentence):
+	text_sentiment = TextBlob(sentence)
+	return text_sentiment.sentiment.polarity
+	
 
 
 def is_conservative(body):
-	if "cpc" in body or "conservative" in body or "cons" in body or "tory" in body or "harper" in body or "right" in body or "scheer" in body:
+	if "cpc" in body or "conservative" in body or "tory" in body or "harper" in body or "scheer" in body:
 		return True
 	else:
 		return False
 
 
 def is_liberal(body):
-	if "lpc" in body or "liberal" in body or "libs" in body or "grits" in body or "trudeau" in body or "justin" in body or "centre" in body or "center" in body:
+	if "lpc" in body or "liberal" in body or "libs" in body or "grits" in body or "trudeau" in body or "justin" in body:
 		return True
 	else: 
 		return False
 
 
 def is_ndp(body):
-	if "ndp" in body or "social democrat" in body or "socialist" in body or "new democrat" in body or "left" in body or "labour" in body or "singh" in body or "jagmeet" in body or "mulcair" in body:
+	if "ndp" in body or "social democrat" in body or "socialist" in body or "new democrat" in body or "singh" in body or "jagmeet" in body or "mulcair" in body:
 		return True
 	else:
 		return False
@@ -103,7 +106,26 @@ def extract_user(word):
 	username = word.partition("/u/")[2]
 	print("extract_user:")
 	print(username)
-	return username
+	#return username
+	return "JKManchester"
+
+def parse_sentence(body):
+	text = TextBlob(body)
+
+	for sentence in text.sentences:
+		determine_partisanship(str(sentence).lower())
+	
+
+
+def determine_partisanship(sentence):
+	if is_conservative(sentence):
+		count_conservative(sentence)
+
+	if is_liberal(sentence):
+		count_liberal(sentence)
+
+	if is_ndp(sentence):
+		count_ndp(sentence)	
 
 
 
@@ -116,25 +138,18 @@ def parse_comment_history(username, reddit):
 	for comment in user.comments.new(limit=None):
 		print(comment.body)	
 
-		if is_conservative(comment.body.lower()):
-			count_conservative(comment.body.lower())
-
-		if is_liberal(comment.body.lower()):
-			count_liberal(comment.body.lower())
-
-		if is_ndp(comment.body.lower()):
-			count_ndp(comment.body.lower())	
+		parse_sentence(comment.body)
 
 	global conservative_count
-	global conservative_bal
+	global conservative_sentiment
 	global liberal_count
-	global liberal_bal
+	global liberal_sentiment
 	global ndp_count
-	global ndp_bal
+	global ndp_sentiment
 
-	comment_reply = "Comments mentioning the Conservatives: " + str(conservative_count) + "  Balance: " + str(conservative_bal) + "\n"
-	comment_reply += "Comments mentioning the Liberals: " + str(liberal_count) + "  Balance: " + str(liberal_bal) + "\n"
-	comment_reply += "Comments mentioning the NDP: " + str(ndp_count) + "  Balance: " + str(ndp_bal)
+	comment_reply = "Comments mentioning the Conservatives: " + str(conservative_count) + "  Average Positivity: " + str(conservative_sentiment) + "\n"
+	comment_reply += "Comments mentioning the Liberals: " + str(liberal_count) + "  Average Positivity: " + str(liberal_sentiment) + "\n"
+	comment_reply += "Comments mentioning the NDP: " + str(ndp_count) + "  Average Positivity: " + str(ndp_sentiment)
 	return comment_reply
 
 
@@ -145,7 +160,9 @@ def run_bot(reddit):
 			comment_reply = "Hi, I'm the partisan bot, and I'm here to to assess your partisanship!\n\n"
 			username = get_username(comment.body, reddit)
 			comment_reply += parse_comment_history(username, reddit)
-			comment.reply(comment_reply)
+
+			print(comment_reply)
+			#comment.reply(comment_reply)
 			print("Replied to comment " + comment.id)
 			comments_replied_to.append(comment.id)
 
